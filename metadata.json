@@ -1,0 +1,6 @@
+{
+  "name": "The Venture Build (TVB)",
+  "description": "AI-powered venture catalyst platform and operating system for ambitious startups and scale-ups, driving growth through execution, market access, Orbits, Hubs, and capital readiness.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

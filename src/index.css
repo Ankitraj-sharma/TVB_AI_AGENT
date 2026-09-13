@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #cbd5e1;
+    background-color: #02172e;
+    letter-spacing: -0.011em;
+  }
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.025em;
+  }
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* TVB Brand Color Utilities */
+:root {
+  --tvb-navy-dark: #02172e;
+  --tvb-navy: #021d3a;
+  --tvb-navy-light: #0b1f34;
+  --tvb-blue: #1863dc;
+  --tvb-blue-hover: #1452b8;
+  --tvb-border: #172a3e;
+}
+
+/* Subtle micro-grid texture for human-designed SaaS depth */
+.bg-grid-subtle {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Precision scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #02172e;
+}
+::-webkit-scrollbar-thumb {
+  background: #172a3e;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #1863dc;
+}
