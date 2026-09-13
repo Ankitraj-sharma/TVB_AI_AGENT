@@ -72,3 +72,30 @@ const PartnerSchema: Schema = new Schema({
 });
 
 export const PartnerModel = mongoose.models.Partner || mongoose.model<IPartnerDoc>('Partner', PartnerSchema);
+
+export interface IUserDoc extends Document {
+  name: string;
+  email: string;
+  password?: string;
+  phone?: string;
+  provider: 'google' | 'phone' | 'email';
+  role: string;
+  title?: string;
+  organization?: string;
+  createdAt?: Date;
+}
+
+const UserSchema: Schema = new Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  password: { type: String },
+  phone: { type: String },
+  provider: { type: String, enum: ['google', 'phone', 'email'], default: 'email' },
+  role: { type: String, enum: ['founder', 'investor', 'advisor', 'partner', 'corporate'], default: 'founder' },
+  title: { type: String },
+  organization: { type: String }
+}, {
+  timestamps: true
+});
+
+export const UserModel = mongoose.models.User || mongoose.model<IUserDoc>('User', UserSchema);

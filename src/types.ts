@@ -116,3 +116,18 @@ export interface TVBPartner {
   category: 'Venture Fund' | 'Ecosystem Partner' | 'Corporate' | 'Advisory';
   description: string;
 }
+
+export type AuthRole = 'founder' | 'investor' | 'advisor' | 'partner' | 'corporate';
+
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: AuthRole;
+  provider: 'google' | 'phone' | 'email';
+  title?: string;
+  organization?: string;
+  avatarUrl?: string;
+  createdAt?: string;
+}

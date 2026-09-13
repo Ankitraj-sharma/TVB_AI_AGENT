@@ -15,9 +15,13 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  LogIn,
+  User,
+  LogOut,
+  Sparkles
 } from 'lucide-react';
-import { PersonaType } from '../types';
+import { PersonaType, UserAccount } from '../types';
 import { PERSONA_DATA } from '../data/tvbData';
 
 interface NavbarProps {
@@ -25,13 +29,17 @@ interface NavbarProps {
   setActiveTab: (tab: string) => void;
   currentPersona: PersonaType;
   setCurrentPersona: (persona: PersonaType) => void;
+  currentUser: UserAccount | null;
+  onOpenAuthModal: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   currentPersona,
-  setCurrentPersona
+  setCurrentPersona,
+  currentUser,
+  onOpenAuthModal
 }) => {
   const [dbModalOpen, setDbModalOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<{
@@ -75,7 +83,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'marketplace', label: 'Scale-Up Marketplace', icon: ShoppingBag, badge: 'Costco Model' },
     { id: 'network', label: 'Network (~40 Cos)', icon: Database },
     { id: 'economics', label: 'Economics Simulator', icon: Calculator },
-    { id: 'ai-os', label: 'TVB Operating System', icon: Cpu, badge: 'Nexus AI' }
+    { id: 'ai-os', label: 'TVB Operating System', icon: Cpu, badge: 'Nexus AI' },
+    { id: 'auth-page', label: 'Login & Register', icon: LogIn, badge: 'Auth' }
   ];
 
   const personas: { id: PersonaType; label: string }[] = [
@@ -154,25 +163,53 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Persona Switcher */}
-        <div className="flex items-center gap-1 bg-[#021d3a] border border-[#172a3e] p-1 rounded-lg">
-          <span className="text-[11px] text-slate-400 font-medium px-2 hidden md:inline">Perspective:</span>
-          {personas.map((p) => {
-            const isSelected = currentPersona === p.id;
-            return (
-              <button
-                key={p.id}
-                onClick={() => setCurrentPersona(p.id)}
-                className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all whitespace-nowrap ${
-                  isSelected
-                    ? 'bg-[#1863dc] text-white font-semibold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#0b1f34]'
-                }`}
-              >
-                {p.label}
-              </button>
-            );
-          })}
+        {/* Right side cluster: Perspectives + Login/User Action */}
+        <div className="flex items-center gap-3">
+          {/* Persona Switcher */}
+          <div className="flex items-center gap-1 bg-[#021d3a] border border-[#172a3e] p-1 rounded-lg">
+            <span className="text-[11px] text-slate-400 font-medium px-2 hidden lg:inline">Perspective:</span>
+            {personas.map((p) => {
+              const isSelected = currentPersona === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setCurrentPersona(p.id)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-[#1863dc] text-white font-semibold shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#0b1f34]'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* User Account / Login Button */}
+          {currentUser ? (
+            <button
+              id="user-profile-btn"
+              onClick={onOpenAuthModal}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0b1f34] hover:bg-[#172a3e] border border-emerald-500/40 text-xs font-semibold text-emerald-300 shadow-sm transition-all"
+              title="Click to view profile / switch account"
+            >
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-bold truncate max-w-[110px]">{currentUser.name.split(' ')[0]}</span>
+              <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
+                {currentUser.role}
+              </span>
+            </button>
+          ) : (
+            <button
+              id="navbar-login-btn"
+              onClick={onOpenAuthModal}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#1863dc] hover:bg-[#1863dc]/90 text-white text-xs font-bold shadow-md shadow-[#1863dc]/30 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Login / Sign Up</span>
+            </button>
+          )}
         </div>
       </div>
 

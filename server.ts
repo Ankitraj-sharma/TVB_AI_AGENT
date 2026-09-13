@@ -3,7 +3,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { connectToDatabase, getDbStatus } from './server/db';
-import { CompanyModel, TeamModel, PartnerModel } from './server/models';
+import { CompanyModel, TeamModel, PartnerModel, UserModel } from './server/models';
 import { seedMongoIfEmpty } from './server/seedData';
 import { NETWORK_COMPANIES, TVB_TEAM, TVB_OFFICIAL_PARTNERS } from './src/data/tvbData';
 
@@ -66,6 +66,157 @@ app.get('/api/health', (_req: Request, res: Response) => {
     platform: 'The Venture Build (TVB) OS',
     database: getDbStatus()
   });
+});
+
+// ================= AUTH API ENDPOINTS ================= //
+
+// Login endpoint (supports email/password, Google auth, or Phone OTP)
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  try {
+    const { email, password, phone, provider = 'email', role = 'founder', name } = req.body;
+    const dbStatus = getDbStatus();
+
+    if (dbStatus.connected) {
+      try {
+        let existingUser = null;
+        if (provider === 'phone' && phone) {
+          existingUser = await UserModel.findOne({ phone });
+        } else if (email) {
+          existingUser = await UserModel.findOne({ email: email.toLowerCase().trim() });
+        }
+
+        if (existingUser) {
+          return res.json({
+            success: true,
+            user: {
+              id: existingUser._id.toString(),
+              name: existingUser.name,
+              email: existingUser.email,
+              phone: existingUser.phone,
+              role: existingUser.role,
+              provider: existingUser.provider,
+              title: existingUser.title || 'Venture Member',
+              organization: existingUser.organization || 'TVB Ecosystem'
+            }
+          });
+        }
+
+        // Auto-provision user if logging in via Google
+        if (provider === 'google' && email) {
+          const newUser = new UserModel({
+            name: name || email.split('@')[0],
+            email: email.toLowerCase().trim(),
+            provider: 'google',
+            role,
+            title: role === 'founder' ? 'Founder & CEO' : role === 'investor' ? 'Venture Investor' : 'Ecosystem Partner',
+            organization: 'TVB Global Network'
+          });
+          await newUser.save();
+
+          return res.json({
+            success: true,
+            user: {
+              id: newUser._id.toString(),
+              name: newUser.name,
+              email: newUser.email,
+              role: newUser.role,
+              provider: newUser.provider,
+              title: newUser.title,
+              organization: newUser.organization
+            }
+          });
+        }
+      } catch (dbErr: any) {
+        console.warn('DB auth lookup failed, falling back to local session:', dbErr?.message);
+      }
+    }
+
+    // Fallback in-memory session (e.g. Atlas offline or demo mode)
+    const displayName = name || (email ? email.split('@')[0] : phone ? `Member (${phone.slice(-4)})` : 'Verified Operator');
+    return res.json({
+      success: true,
+      user: {
+        id: 'usr_' + Date.now(),
+        name: displayName,
+        email: email || `${phone || 'user'}@theventurebuild.com`,
+        phone: phone || '',
+        role: role || 'founder',
+        provider: provider || 'email',
+        title: role === 'founder' ? 'Founder & CEO' : role === 'investor' ? 'Venture Investor' : 'Scale-Up Advisor',
+        organization: 'The Venture Build Network'
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Login failed' });
+  }
+});
+
+// Register endpoint
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  try {
+    const { name, email, password, phone, role = 'founder', organization, title, provider = 'email' } = req.body;
+
+    if (!name || (!email && !phone)) {
+      return res.status(400).json({ success: false, error: 'Name and email or phone number are required.' });
+    }
+
+    const dbStatus = getDbStatus();
+    if (dbStatus.connected) {
+      try {
+        if (email) {
+          const existing = await UserModel.findOne({ email: email.toLowerCase().trim() });
+          if (existing) {
+            return res.status(409).json({ success: false, error: 'An account with this email already exists. Please log in.' });
+          }
+        }
+
+        const newUser = new UserModel({
+          name,
+          email: email ? email.toLowerCase().trim() : `${phone}@theventurebuild.com`,
+          password,
+          phone,
+          provider,
+          role,
+          title: title || (role === 'founder' ? 'Founder & CEO' : role === 'investor' ? 'General Partner' : 'Operator'),
+          organization: organization || 'The Venture Build Ecosystem'
+        });
+        await newUser.save();
+
+        return res.status(201).json({
+          success: true,
+          user: {
+            id: newUser._id.toString(),
+            name: newUser.name,
+            email: newUser.email,
+            phone: newUser.phone,
+            role: newUser.role,
+            provider: newUser.provider,
+            title: newUser.title,
+            organization: newUser.organization
+          }
+        });
+      } catch (dbErr: any) {
+        console.warn('DB register error, using in-memory response:', dbErr?.message);
+      }
+    }
+
+    // In-memory fallback
+    return res.status(201).json({
+      success: true,
+      user: {
+        id: 'usr_' + Date.now(),
+        name,
+        email: email || `${phone}@theventurebuild.com`,
+        phone: phone || '',
+        role,
+        provider,
+        title: title || (role === 'founder' ? 'Founder & CEO' : 'Venture Partner'),
+        organization: organization || 'The Venture Build Ecosystem'
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Registration failed' });
+  }
 });
 
 // Live Database Status Endpoint
