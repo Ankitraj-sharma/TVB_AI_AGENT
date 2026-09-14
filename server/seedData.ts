@@ -22,7 +22,7 @@ export async function seedMongoIfEmpty() {
         },
         tvbIntervention: c.tvbIntervention
       }));
-      await CompanyModel.insertMany(companyDocs);
+      await CompanyModel.insertMany(companyDocs as any);
       console.log(`[MongoDB Seeder] Successfully seeded ${companyDocs.length} companies to MongoDB Atlas.`);
     } else {
       console.log(`[MongoDB Seeder] Atlas already contains ${companyCount} companies.`);
@@ -31,14 +31,14 @@ export async function seedMongoIfEmpty() {
     const teamCount = await TeamModel.countDocuments();
     if (teamCount === 0) {
       console.log('[MongoDB Seeder] Seeding TVB Leadership & Operators into Atlas...');
-      await TeamModel.insertMany(TVB_TEAM);
+      await TeamModel.insertMany(TVB_TEAM as any);
       console.log(`[MongoDB Seeder] Successfully seeded ${TVB_TEAM.length} team members.`);
     }
 
     const partnerCount = await PartnerModel.countDocuments();
     if (partnerCount === 0) {
       console.log('[MongoDB Seeder] Seeding TVB Institutional Partners into Atlas...');
-      await PartnerModel.insertMany(TVB_OFFICIAL_PARTNERS);
+      await PartnerModel.insertMany(TVB_OFFICIAL_PARTNERS as any);
       console.log(`[MongoDB Seeder] Successfully seeded ${TVB_OFFICIAL_PARTNERS.length} partners.`);
     }
   } catch (err: any) {

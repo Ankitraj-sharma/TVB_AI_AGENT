@@ -12,7 +12,8 @@ import {
   KeyRound, 
   ChevronRight,
   Briefcase,
-  AlertCircle
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react';
 import { AuthRole, UserAccount } from '../types';
 
@@ -28,7 +29,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
   initialMode = 'login'
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
-  const [authMethod, setAuthMethod] = useState<'email' | 'google' | 'phone'>('email');
+  const [authMethod, setAuthMethod] = useState<'phone' | 'email_otp' | 'email'>('phone');
   const [selectedRole, setSelectedRole] = useState<AuthRole>('founder');
 
   const [name, setName] = useState('');
@@ -37,6 +38,8 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  const [emailPreviewUrl, setEmailPreviewUrl] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [organization, setOrganization] = useState('');
   const [title, setTitle] = useState('');
 
@@ -51,8 +54,8 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: 'Ankit Raj Sharma',
-          email: 'ankitrajsharma.125891@marwadiuniversity.ac.in',
+          name: 'Verified Google Member',
+          email: 'founder@theventurebuild.com',
           provider: 'google',
           role: selectedRole
         })
@@ -66,11 +69,11 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
     } catch {
       onSuccess({
         id: 'usr_google_' + Date.now(),
-        name: 'Ankit Raj Sharma',
-        email: 'ankitrajsharma.125891@marwadiuniversity.ac.in',
+        name: 'Verified Google Member',
+        email: 'founder@theventurebuild.com',
         role: selectedRole,
         provider: 'google',
-        title: 'Scale-Up Leader',
+        title: selectedRole === 'founder' ? 'Founder & CEO' : selectedRole === 'investor' ? 'Managing Partner' : 'Venture Advisor',
         organization: 'The Venture Build Network'
       });
     } finally {
@@ -78,33 +81,119 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
     }
   };
 
+  const handleSendPhoneOtp = async () => {
+    if (!phone || phone.trim().length < 7) {
+      setError('Please enter a valid mobile phone number (e.g. +1 512 555 0192 or 7903356870).');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/otp/send-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOtpSent(true);
+        setOtp('');
+        setSuccessMessage(data.message || `Verification code sent to ${data.formattedPhone || phone}`);
+      } else {
+        setError(data.error || 'Failed to dispatch verification code.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Verification service unreachable.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePhoneVerify = async () => {
-    if (!otp) {
+    if (!otp || otp.trim().length < 4) {
       setError('Please enter the 6-digit verification code.');
       return;
     }
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/otp/verify-phone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, provider: 'phone', role: selectedRole })
+        body: JSON.stringify({ phone: phone.trim(), code: otp.trim(), role: selectedRole, name: name || undefined })
       });
       const data = await res.json();
       if (data.success && data.user) {
-        onSuccess(data.user);
+        setSuccessMessage('Phone verified successfully! Signing in...');
+        setTimeout(() => {
+          onSuccess(data.user);
+        }, 500);
+      } else {
+        setError(data.error || 'Invalid verification code. Please check and try again.');
       }
-    } catch {
-      onSuccess({
-        id: 'usr_phone_' + Date.now(),
-        name: `User (${phone})`,
-        email: `${phone}@theventurebuild.com`,
-        phone,
-        role: selectedRole,
-        provider: 'phone',
-        title: 'Verified Member',
-        organization: 'TVB Network'
+    } catch (err: any) {
+      setError(err.message || 'Verification failed. Please retry.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!email || !email.includes('@')) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    setError(null);
+    setEmailPreviewUrl(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/otp/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() })
       });
+      const data = await res.json();
+      if (data.success) {
+        setOtpSent(true);
+        setOtp('');
+        setSuccessMessage(data.message || `Verification code sent to ${email}`);
+        if (data.previewUrl) {
+          setEmailPreviewUrl(data.previewUrl);
+        }
+      } else {
+        setError(data.error || 'Failed to dispatch email verification code.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Email dispatch service unreachable.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!otp || otp.trim().length < 4) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/auth/otp/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), code: otp.trim(), role: selectedRole, name: name || undefined })
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        setSuccessMessage('Email verified successfully! Signing in...');
+        setTimeout(() => {
+          onSuccess(data.user);
+        }, 500);
+      } else {
+        setError(data.error || 'Invalid verification code. Please check and try again.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Verification failed. Please retry.');
     } finally {
       setLoading(false);
     }
@@ -281,29 +370,40 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
               </button>
             </div>
 
-            {/* Auth method pills: Email vs Phone */}
-            <div className="flex items-center gap-2 mb-4">
+            {/* Auth method switcher: Phone vs Email OTP vs Password */}
+            <div className="grid grid-cols-3 gap-1.5 mb-4">
               <button
                 type="button"
-                onClick={() => { setAuthMethod('email'); setError(null); }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
-                  authMethod === 'email'
-                    ? 'bg-[#0b1f34] text-[#81a9f0] border-[#1863dc]'
+                onClick={() => { setAuthMethod('phone'); setError(null); setOtpSent(false); setOtp(''); }}
+                className={`py-2 px-1 text-[11px] font-semibold rounded-lg border transition-all text-center ${
+                  authMethod === 'phone'
+                    ? 'bg-[#0b1f34] text-[#81a9f0] border-[#1863dc] font-bold'
                     : 'bg-[#02172e] text-slate-400 border-[#172a3e] hover:text-white'
                 }`}
               >
-                Email Address
+                Phone (SMS)
               </button>
               <button
                 type="button"
-                onClick={() => { setAuthMethod('phone'); setError(null); }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
-                  authMethod === 'phone'
-                    ? 'bg-[#0b1f34] text-[#81a9f0] border-[#1863dc]'
+                onClick={() => { setAuthMethod('email_otp'); setError(null); setOtpSent(false); setOtp(''); }}
+                className={`py-2 px-1 text-[11px] font-semibold rounded-lg border transition-all text-center ${
+                  authMethod === 'email_otp'
+                    ? 'bg-[#0b1f34] text-[#81a9f0] border-[#1863dc] font-bold'
                     : 'bg-[#02172e] text-slate-400 border-[#172a3e] hover:text-white'
                 }`}
               >
-                Mobile OTP
+                Email (SMTP)
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthMethod('email'); setError(null); }}
+                className={`py-2 px-1 text-[11px] font-semibold rounded-lg border transition-all text-center ${
+                  authMethod === 'email'
+                    ? 'bg-[#0b1f34] text-[#81a9f0] border-[#1863dc] font-bold'
+                    : 'bg-[#02172e] text-slate-400 border-[#172a3e] hover:text-white'
+                }`}
+              >
+                Password
               </button>
             </div>
 
@@ -311,6 +411,13 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
               <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <span>{error}</span>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>{successMessage}</span>
               </div>
             )}
 
@@ -325,7 +432,7 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+1 (512) 839-4400"
+                      placeholder="+1 (512) 839-4400 or 7903356870"
                       className="w-full pl-9 pr-3 py-2.5 bg-[#02172e] border border-[#172a3e] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#1863dc]"
                     />
                   </div>
@@ -334,31 +441,37 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                 {!otpSent ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!phone) {
-                        setError('Please enter your mobile phone number.');
-                        return;
-                      }
-                      setOtpSent(true);
-                      setOtp('790331');
-                    }}
+                    onClick={handleSendPhoneOtp}
+                    disabled={loading}
                     className="w-full py-3 rounded-xl bg-[#1863dc] hover:bg-[#1863dc]/90 text-white text-xs font-bold shadow-lg shadow-[#1863dc]/25 transition-all flex items-center justify-center gap-2"
                   >
-                    <span>Send Verification Code (SMS)</span>
-                    <ArrowRight className="w-4 h-4" />
+                    {loading ? (
+                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    ) : (
+                      <>
+                        <span>Send 6-Digit Verification Code</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
                   </button>
                 ) : (
                   <div className="space-y-3">
                     <div>
                       <div className="flex justify-between items-center mb-1.5">
-                        <label className="text-xs text-slate-300 font-medium">6-Digit Verification Code</label>
-                        <span className="text-[11px] text-cyan-400 font-mono">Demo OTP: 790331</span>
+                        <label className="text-xs text-slate-300 font-medium">Enter 6-Digit Code</label>
+                        <button
+                          type="button"
+                          onClick={handleSendPhoneOtp}
+                          className="text-[11px] text-[#81a9f0] hover:underline"
+                        >
+                          Resend Code
+                        </button>
                       </div>
                       <input
                         type="text"
                         value={otp}
                         onChange={(e) => setOtp(e.target.value)}
-                        placeholder="790331"
+                        placeholder="6-digit code"
                         maxLength={6}
                         className="w-full px-3 py-2.5 text-center tracking-widest font-mono text-base bg-[#02172e] border border-[#1863dc] rounded-xl text-white placeholder-slate-500 focus:outline-none"
                       />
@@ -369,8 +482,105 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                       disabled={loading}
                       className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2"
                     >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Verify & Sign In</span>
+                      {loading ? (
+                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Verify & Sign In</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : authMethod === 'email_otp' ? (
+              /* Email OTP Mode via Real SMTP */
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1.5 font-medium">Your Email Address</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="founder@theventurebuild.com"
+                      className="w-full pl-9 pr-3 py-2.5 bg-[#02172e] border border-[#172a3e] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#1863dc]"
+                    />
+                  </div>
+                </div>
+
+                {emailPreviewUrl && (
+                  <div className="p-3 rounded-xl bg-cyan-950/50 border border-cyan-800 text-cyan-200 text-xs flex flex-col gap-1.5">
+                    <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Live SMTP Email Dispatched:
+                    </span>
+                    <a
+                      href={emailPreviewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-cyan-400 hover:underline font-mono text-[11px]"
+                    >
+                      <span>Open dispatched email in web viewer</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                )}
+
+                {!otpSent ? (
+                  <button
+                    type="button"
+                    onClick={handleSendEmailOtp}
+                    disabled={loading}
+                    className="w-full py-3 rounded-xl bg-[#1863dc] hover:bg-[#1863dc]/90 text-white text-xs font-bold shadow-lg shadow-[#1863dc]/25 transition-all flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    ) : (
+                      <>
+                        <span>Send 6-Digit Email Code via SMTP</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="text-xs text-slate-300 font-medium">Enter 6-Digit Code</label>
+                        <button
+                          type="button"
+                          onClick={handleSendEmailOtp}
+                          className="text-[11px] text-[#81a9f0] hover:underline"
+                        >
+                          Resend Code
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)}
+                        placeholder="6-digit code"
+                        maxLength={6}
+                        className="w-full px-3 py-2.5 text-center tracking-widest font-mono text-base bg-[#02172e] border border-[#1863dc] rounded-xl text-white placeholder-slate-500 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleVerifyEmailOtp}
+                      disabled={loading}
+                      className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2"
+                    >
+                      {loading ? (
+                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Verify & Sign In</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 )}

@@ -6,6 +6,7 @@ import { connectToDatabase, getDbStatus } from './server/db';
 import { CompanyModel, TeamModel, PartnerModel, UserModel } from './server/models';
 import { seedMongoIfEmpty } from './server/seedData';
 import { NETWORK_COMPANIES, TVB_TEAM, TVB_OFFICIAL_PARTNERS } from './src/data/tvbData';
+import { sendSmsOtp, sendEmailOtp, verifyOtp, verifyPhoneOtp, normalizePhoneNumber } from './server/verificationService';
 
 dotenv.config();
 
@@ -30,9 +31,9 @@ async function executeGeminiWithFallback(
   responseMimeType: string = 'application/json'
 ): Promise<{ text: string; model: string } | null> {
   const candidateModels = [
-    'gemini-3.6-flash',
     'gemini-3.1-flash-lite',
-    'gemini-3.8-flash'
+    'gemini-3.8-flash',
+    'gemini-flash-latest'
   ];
 
   for (const model of candidateModels) {
@@ -68,7 +69,197 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
-// ================= AUTH API ENDPOINTS ================= //
+// ================= AUTH API & VERIFICATION ENDPOINTS ================= //
+
+// Send Real SMS / Phone OTP endpoint
+app.post('/api/auth/otp/send-phone', async (req: Request, res: Response) => {
+  try {
+    const { phone } = req.body;
+    if (!phone || String(phone).trim().length < 7) {
+      return res.status(400).json({ success: false, error: 'A valid mobile phone number is required (e.g. +1 512 555 0192 or 7903356870).' });
+    }
+
+    const result = await sendSmsOtp(String(phone).trim());
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error || result.message });
+    }
+
+    return res.json({
+      success: true,
+      message: result.message,
+      deliveryMethod: result.deliveryMethod,
+      expiresInSeconds: result.expiresInSeconds,
+      formattedPhone: result.formattedPhone
+    });
+  } catch (err: any) {
+    console.error('Error sending SMS OTP:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to dispatch SMS verification code.' });
+  }
+});
+
+// Send Real Email OTP endpoint
+app.post('/api/auth/otp/send-email', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, error: 'A valid email address is required.' });
+    }
+
+    const result = await sendEmailOtp(String(email).trim());
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error || result.message });
+    }
+
+    return res.json({
+      success: true,
+      message: result.message,
+      deliveryMethod: result.deliveryMethod,
+      expiresInSeconds: result.expiresInSeconds
+    });
+  } catch (err: any) {
+    console.error('Error sending Email OTP:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to dispatch Email verification code.' });
+  }
+});
+
+// Verify Phone OTP and log in / register
+app.post('/api/auth/otp/verify-phone', async (req: Request, res: Response) => {
+  try {
+    const { phone, code, role = 'founder', name } = req.body;
+    if (!phone || !code) {
+      return res.status(400).json({ success: false, error: 'Phone number and 6-digit verification code are required.' });
+    }
+
+    const verification = await verifyPhoneOtp(String(phone).trim(), String(code).trim());
+    if (!verification.valid) {
+      return res.status(401).json({ success: false, error: verification.error || 'Invalid verification code.' });
+    }
+
+    const resolvedPhone = verification.formattedPhone || normalizePhoneNumber(String(phone).trim());
+    const rawCleanPhone = String(phone).trim();
+
+    const dbStatus = getDbStatus();
+    if (dbStatus.connected) {
+      try {
+        let user = await UserModel.findOne({
+          $or: [{ phone: resolvedPhone }, { phone: rawCleanPhone }]
+        });
+        if (!user) {
+          user = new UserModel({
+            name: name || `Member (${resolvedPhone.slice(-4)})`,
+            phone: resolvedPhone,
+            email: `${resolvedPhone.replace(/\D/g, '')}@theventurebuild.com`,
+            provider: 'phone',
+            role,
+            title: role === 'founder' ? 'Founder & CEO' : role === 'investor' ? 'Venture Investor' : 'Scale-Up Operator',
+            organization: 'TVB Global Ecosystem'
+          });
+          await user.save();
+        }
+
+        return res.json({
+          success: true,
+          verified: true,
+          user: {
+            id: user._id.toString(),
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            provider: 'phone',
+            title: user.title,
+            organization: user.organization
+          }
+        });
+      } catch (dbErr: any) {
+        console.warn('DB lookup failed on OTP verify, returning verified local session:', dbErr.message);
+      }
+    }
+
+    // In-memory verified user response
+    return res.json({
+      success: true,
+      verified: true,
+      user: {
+        id: 'usr_phone_' + Date.now(),
+        name: name || `Mobile Operator (${resolvedPhone.slice(-4)})`,
+        email: `${resolvedPhone.replace(/\D/g, '')}@theventurebuild.com`,
+        phone: resolvedPhone,
+        role,
+        provider: 'phone',
+        title: role === 'founder' ? 'Founder & CEO' : role === 'investor' ? 'Venture Investor' : 'Scale-Up Operator',
+        organization: 'TVB Ecosystem'
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'OTP verification failed' });
+  }
+});
+
+// Verify Email OTP and log in / register
+app.post('/api/auth/otp/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { email, code, role = 'founder', name } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ success: false, error: 'Email and 6-digit verification code are required.' });
+    }
+
+    const verification = verifyOtp(String(email).trim().toLowerCase(), String(code).trim());
+    if (!verification.valid) {
+      return res.status(401).json({ success: false, error: verification.error || 'Invalid verification code.' });
+    }
+
+    const dbStatus = getDbStatus();
+    if (dbStatus.connected) {
+      try {
+        let user = await UserModel.findOne({ email: String(email).trim().toLowerCase() });
+        if (!user) {
+          user = new UserModel({
+            name: name || String(email).split('@')[0],
+            email: String(email).trim().toLowerCase(),
+            provider: 'email',
+            role,
+            title: role === 'founder' ? 'Founder & CEO' : role === 'investor' ? 'Venture Investor' : 'Scale-Up Operator',
+            organization: 'TVB Global Network'
+          });
+          await user.save();
+        }
+
+        return res.json({
+          success: true,
+          verified: true,
+          user: {
+            id: user._id.toString(),
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            provider: 'email',
+            title: user.title,
+            organization: user.organization
+          }
+        });
+      } catch (dbErr: any) {
+        console.warn('DB lookup failed on Email OTP verify:', dbErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      verified: true,
+      user: {
+        id: 'usr_email_' + Date.now(),
+        name: name || String(email).split('@')[0],
+        email: String(email).trim().toLowerCase(),
+        role,
+        provider: 'email',
+        title: role === 'founder' ? 'Founder & CEO' : role === 'investor' ? 'Venture Investor' : 'Scale-Up Operator',
+        organization: 'TVB Network'
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Email OTP verification failed' });
+  }
+});
 
 // Login endpoint (supports email/password, Google auth, or Phone OTP)
 app.post('/api/auth/login', async (req: Request, res: Response) => {
@@ -254,7 +445,16 @@ app.post('/api/db/companies', async (req: Request, res: Response) => {
     });
   }
   try {
-    const newCompany = new CompanyModel(req.body);
+    const payload = {
+      ...req.body,
+      tagline: req.body.tagline || req.body.description || 'Scaling with The Venture Build',
+      focus: req.body.focus || req.body.description || req.body.category || 'Enterprise execution and market access',
+      geography: req.body.geography || (req.body.hub ? [req.body.hub] : ['Austin / Texas Hub']),
+      category: req.body.category || 'Tech Scale-Up',
+      orbit: req.body.orbit || 'ai',
+      stage: req.body.stage || 'Seed / Series A'
+    };
+    const newCompany = new CompanyModel(payload);
     await newCompany.save();
     return res.status(201).json({ success: true, data: newCompany });
   } catch (err: any) {

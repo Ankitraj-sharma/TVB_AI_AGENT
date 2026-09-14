@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Model, Document } from 'mongoose';
 
 export interface ICompanyDoc extends Document {
   name: string;
@@ -24,8 +24,8 @@ const CompanySchema: Schema = new Schema({
   orbit: { type: String, required: true },
   stage: { type: String, required: true },
   valuation: { type: String, default: 'Undisclosed' },
-  tagline: { type: String, required: true },
-  focus: { type: String, required: true },
+  tagline: { type: String, default: 'Scaling with The Venture Build' },
+  focus: { type: String, default: 'Enterprise execution and market access' },
   geography: [{ type: String }],
   metrics: {
     growth: { type: String, default: '50%+' },
@@ -37,7 +37,8 @@ const CompanySchema: Schema = new Schema({
   timestamps: true
 });
 
-export const CompanyModel = mongoose.models.Company || mongoose.model<ICompanyDoc>('Company', CompanySchema);
+export const CompanyModel: Model<ICompanyDoc> = 
+  (mongoose.models.Company as Model<ICompanyDoc>) || mongoose.model<ICompanyDoc>('Company', CompanySchema);
 
 export interface ITeamDoc extends Document {
   name: string;
@@ -55,7 +56,8 @@ const TeamSchema: Schema = new Schema({
   timestamps: true
 });
 
-export const TeamModel = mongoose.models.Team || mongoose.model<ITeamDoc>('Team', TeamSchema);
+export const TeamModel: Model<ITeamDoc> = 
+  (mongoose.models.Team as Model<ITeamDoc>) || mongoose.model<ITeamDoc>('Team', TeamSchema);
 
 export interface IPartnerDoc extends Document {
   name: string;
@@ -71,7 +73,8 @@ const PartnerSchema: Schema = new Schema({
   timestamps: true
 });
 
-export const PartnerModel = mongoose.models.Partner || mongoose.model<IPartnerDoc>('Partner', PartnerSchema);
+export const PartnerModel: Model<IPartnerDoc> = 
+  (mongoose.models.Partner as Model<IPartnerDoc>) || mongoose.model<IPartnerDoc>('Partner', PartnerSchema);
 
 export interface IUserDoc extends Document {
   name: string;
@@ -98,4 +101,5 @@ const UserSchema: Schema = new Schema({
   timestamps: true
 });
 
-export const UserModel = mongoose.models.User || mongoose.model<IUserDoc>('User', UserSchema);
+export const UserModel: Model<IUserDoc> = 
+  (mongoose.models.User as Model<IUserDoc>) || mongoose.model<IUserDoc>('User', UserSchema);
